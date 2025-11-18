@@ -120,6 +120,19 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Hider found button
+  socket.on('hider-found', () => {
+    const player = gameState.players.get(socket.id);
+    if (player && player.role === 'hider' && gameState.gameStarted) {
+      io.emit('game-ended', { 
+        reason: 'Hider was found', 
+        winner: 'seekers',
+        finder: 'Hider surrendered'
+      });
+      stopGame();
+    }
+  });
+
   // Player disconnection
   socket.on('disconnect', () => {
     const player = gameState.players.get(socket.id);
@@ -241,27 +254,9 @@ function startZoneShrinking() {
 function checkWinConditions() {
   if (!gameState.gameStarted) return;
   
-  const seekers = Array.from(gameState.players.values()).filter(p => p.role === 'seeker');
   const hiderPlayer = gameState.hider ? gameState.players.get(gameState.hider) : null;
   
   if (!hiderPlayer || !hiderPlayer.location) return;
-  
-  // Check if any seeker is close enough to the hider (within 20 meters)
-  for (const seeker of seekers) {
-    if (seeker.location) {
-      const distance = calculateDistance(seeker.location, hiderPlayer.location);
-      if (distance < 20) {
-        io.emit('game-ended', { 
-          reason: 'Seeker found hider', 
-          winner: 'seekers',
-          finder: seeker.name,
-          distance: Math.round(distance)
-        });
-        stopGame();
-        return;
-      }
-    }
-  }
   
   // Check if hider is outside the zone
   const hiderDistance = calculateDistance(hiderPlayer.location, gameState.zoneCenter);
@@ -317,7 +312,8 @@ function getZoneInfo() {
   return {
     center: gameState.zoneCenter,
     radius: gameState.zoneRadius,
-    innerCircle: innerCircle
+    innerCircle: innerCircle,
+    showToSeekers: true // Always show zone to seekers
   };
 }
 

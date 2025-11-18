@@ -13,8 +13,31 @@ let gameStartTime = null;
 let zoneTimer = null;
 let gameTimer = null;
 
+// localStorage functions
+function savePlayerData() {
+    localStorage.setItem('seekThem_playerName', playerName);
+    localStorage.setItem('seekThem_selectedRole', selectedRole);
+}
+
+function loadSavedPlayerData() {
+    const savedName = localStorage.getItem('seekThem_playerName');
+    const savedRole = localStorage.getItem('seekThem_selectedRole');
+    
+    if (savedName) {
+        playerName = savedName;
+        document.getElementById('player-name').value = savedName;
+    }
+    
+    if (savedRole) {
+        selectRole(savedRole);
+    }
+    
+    updateJoinButton();
+}
+
 // Initialize the application
 document.addEventListener('DOMContentLoaded', () => {
+    loadSavedPlayerData();
     initializeSocket();
     setupEventListeners();
     requestLocationPermission();
@@ -94,6 +117,7 @@ function setupEventListeners() {
     nameInput.addEventListener('input', (e) => {
         playerName = e.target.value.trim();
         updateJoinButton();
+        if (playerName) savePlayerData();
     });
     
     nameInput.addEventListener('keypress', (e) => {
@@ -182,10 +206,11 @@ function initializeMap() {
         map.remove();
     }
     
+    // Center on Ireland initially
     map = L.map('map', {
         zoomControl: false,
         attributionControl: false
-    }).setView([0, 0], 15);
+    }).setView([53.1424, -7.6921], 7); // Ireland coordinates
     
     // Add tile layer
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -269,18 +294,18 @@ function updateZone(zoneData) {
         map.removeLayer(innerCircle);
     }
     
-    // Add main zone circle
+    // Add main zone circle (visible to all players)
     zoneCircle = L.circle([zoneData.center.lat, zoneData.center.lng], {
         radius: zoneData.radius,
         fillColor: '#ff6b6b',
-        fillOpacity: 0.1,
+        fillOpacity: selectedRole === 'seeker' ? 0.05 : 0.1, // Less opacity for seekers
         color: '#ff6b6b',
         weight: 3,
-        dashArray: '10, 5'
+        dashArray: selectedRole === 'seeker' ? '5, 5' : '10, 5'
     }).addTo(map);
     
-    // Add inner circle if available (shows hider's safe area)
-    if (zoneData.innerCircle) {
+    // Add inner circle only for hiders (shows hider's safe area)
+    if (zoneData.innerCircle && selectedRole === 'hider') {
         innerCircle = L.circle([zoneData.innerCircle.center.lat, zoneData.innerCircle.center.lng], {
             radius: zoneData.innerCircle.radius,
             fillColor: '#4CAF50',
@@ -305,6 +330,7 @@ function selectRole(role) {
     
     document.querySelector(`.role-card.${role}`).classList.add('selected');
     updateJoinButton();
+    savePlayerData();
 }
 
 function updateJoinButton() {
@@ -316,6 +342,7 @@ function updateJoinButton() {
 function joinGame() {
     if (!selectedRole || !playerName) return;
     
+    savePlayerData();
     showScreen('loading');
     socket.emit('join-game', { role: selectedRole, name: playerName });
 }
@@ -398,6 +425,13 @@ function updateGameState(gameState) {
     if (startBtn) {
         startBtn.style.display = 
             (selectedRole === 'hider' && !gameState.gameStarted) ? 'block' : 'none';
+    }
+    
+    // Show found me button if player is hider and game has started
+    const foundBtn = document.getElementById('found-me-btn');
+    if (foundBtn) {
+        foundBtn.style.display = 
+            (selectedRole === 'hider' && gameState.gameStarted) ? 'block' : 'none';
     }
     
     // Update role badge
@@ -507,6 +541,20 @@ function showToast(message, type = 'info') {
 }
 
 // Utility functions
+// Found Me button functions
+function foundMe() {
+    document.getElementById('confirmation-modal').style.display = 'flex';
+}
+
+function confirmFound() {
+    socket.emit('hider-found');
+    document.getElementById('confirmation-modal').style.display = 'none';
+}
+
+function cancelFound() {
+    document.getElementById('confirmation-modal').style.display = 'none';
+}
+
 function calculateDistance(pos1, pos2) {
     const R = 6371000; // Earth's radius in meters
     const dLat = (pos2.lat - pos1.lat) * Math.PI / 180;

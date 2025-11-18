@@ -66,6 +66,9 @@
                     <button id="start-game-btn" class="btn small" onclick="startGame()" style="display: none;">
                         Start Game
                     </button>
+                    <button id="found-me-btn" class="btn small success" onclick="foundMe()" style="display: none;">
+                        Found Me
+                    </button>
                     <button id="leave-btn" class="btn small danger" onclick="leaveGame()">
                         Leave
                     </button>
@@ -120,6 +123,18 @@
                 <button class="btn primary" onclick="showRoleSelection()">
                     Play Again
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmation-modal" class="modal">
+        <div class="modal-content">
+            <h3>Confirm Found</h3>
+            <p>Are you sure you've been found?</p>
+            <div class="modal-buttons">
+                <button class="btn danger" onclick="confirmFound()">Yes, I'm Found</button>
+                <button class="btn secondary" onclick="cancelFound()">Cancel</button>
             </div>
         </div>
     </div>

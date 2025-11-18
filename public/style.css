@@ -200,6 +200,24 @@ body {
     background: #da190b;
 }
 
+.btn.success {
+    background: #4CAF50;
+    color: white;
+}
+
+.btn.success:hover {
+    background: #45a049;
+}
+
+.btn.secondary {
+    background: #757575;
+    color: white;
+}
+
+.btn.secondary:hover {
+    background: #616161;
+}
+
 .game-info {
     margin-top: 20px;
     opacity: 0.8;
@@ -579,5 +597,56 @@ body {
     
     .player-marker {
         border-width: 3px;
+    }
+}
+
+/* Modal styles */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(5px);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background: white;
+    padding: 30px;
+    border-radius: 20px;
+    text-align: center;
+    max-width: 90%;
+    width: 300px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.modal-content h3 {
+    margin-bottom: 15px;
+    color: #333;
+    font-size: 1.5rem;
+}
+
+.modal-content p {
+    margin-bottom: 25px;
+    color: #666;
+    font-size: 1rem;
+    line-height: 1.4;
+}
+
+.modal-buttons {
+    display: flex;
+    gap: 15px;
+    flex-direction: column;
+}
+
+@media (min-width: 480px) {
+    .modal-buttons {
+        flex-direction: row;
+        justify-content: center;
     }
 }
