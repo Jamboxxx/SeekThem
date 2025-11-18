@@ -50,6 +50,7 @@
                 
                 <div class="game-info">
                     <div id="player-count">👥 0 players online</div>
+                    <button id="admin-btn" class="btn admin-btn" onclick="showAdminLogin()">⚙️ Admin</button>
                 </div>
             </div>
         </div>
@@ -127,6 +128,79 @@
         </div>
     </div>
 
+    <!-- Admin Login Modal -->
+    <div id="admin-login-modal" class="modal">
+        <div class="modal-content">
+            <h3>Admin Access</h3>
+            <p>Enter admin password:</p>
+            <input type="password" id="admin-password" placeholder="Password" maxlength="20">
+            <div class="modal-buttons">
+                <button class="btn primary" onclick="checkAdminPassword()">Login</button>
+                <button class="btn secondary" onclick="closeAdminLogin()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Panel Screen -->
+    <div id="admin-panel" class="screen">
+        <div class="container admin-container">
+            <h2>🛠️ Admin Tools</h2>
+            
+            <div class="admin-section">
+                <h3>Game Status</h3>
+                <div class="admin-info">
+                    <div id="admin-player-count">Players: 0</div>
+                    <div id="admin-game-status">Status: Waiting</div>
+                    <div id="admin-hider-status">Hider: None</div>
+                </div>
+            </div>
+
+            <div class="admin-section">
+                <h3>Dummy Players</h3>
+                <div class="admin-controls">
+                    <button class="btn primary" onclick="addDummySeeker()">Add Dummy Seeker</button>
+                    <button class="btn success" onclick="addDummyHider()">Add Dummy Hider</button>
+                    <button class="btn danger" onclick="removeDummyPlayers()">Remove All Dummies</button>
+                </div>
+                <div id="dummy-list" class="dummy-list"></div>
+            </div>
+
+            <div class="admin-section">
+                <h3>Game Controls</h3>
+                <div class="admin-controls">
+                    <button class="btn success" onclick="adminStartGame()">Force Start Game</button>
+                    <button class="btn danger" onclick="adminStopGame()">Stop Game</button>
+                    <button class="btn secondary" onclick="adminResetGame()">Reset Game</button>
+                </div>
+            </div>
+
+            <div class="admin-section">
+                <h3>Zone Controls</h3>
+                <div class="admin-controls">
+                    <div class="zone-info">
+                        <div id="zone-phase-display">Zone Phase: Waiting</div>
+                    </div>
+                    
+                    <label>Zone Radius (m):</label>
+                    <input type="number" id="zone-radius-input" value="1000" min="50" max="5000">
+                    <button class="btn primary" onclick="updateZoneRadius()">Update Radius</button>
+                    
+                    <label>Shrink Rate (%):</label>
+                    <input type="range" id="shrink-rate-slider" value="50" min="10" max="90" oninput="updateShrinkRateDisplay()">
+                    <span id="shrink-rate-display">50%</span>
+                    
+                    <label>Shrink Interval (minutes):</label>
+                    <input type="number" id="shrink-interval-input" value="15" min="1" max="60">
+                    
+                    <button class="btn success" onclick="updateZoneSettings()">Update Zone Settings</button>
+                    <button class="btn warning" onclick="triggerZoneShrink()">Trigger Shrink Now</button>
+                </div>
+            </div>
+
+            <button class="btn secondary" onclick="exitAdmin()">Exit Admin</button>
+        </div>
+    </div>
+
     <!-- Confirmation Modal -->
     <div id="confirmation-modal" class="modal">
         <div class="modal-content">
@@ -143,6 +217,14 @@
     <div id="toast" class="toast"></div>
 
     <!-- Scripts -->
+    <script>
+        // Register service worker for background processing
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js')
+                .then(registration => console.log('SW registered'))
+                .catch(error => console.log('SW registration failed'));
+        }
+    </script>
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="app.js"></script>

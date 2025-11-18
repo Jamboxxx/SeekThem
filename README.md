@@ -54,9 +54,25 @@ npm start
    - Seekers try to find the hider before the zone collapses
 
 4. **Winning Conditions**:
-   - **Seekers Win**: Get within 20 meters of the hider
+   - **Seekers Win**: Hider clicks "Found Me" button
    - **Hider Wins**: Survive until the zone becomes too small
    - **Seekers Win**: Hider leaves the safe zone
+
+## 🛠 Admin Tools
+
+Access admin tools from the homepage with password: **`seek`**
+
+### Admin Features:
+- **Game Status**: View current player count, game state, and hider status
+- **Dummy Players**: Add test seekers and hiders with random Dublin locations
+- **Game Controls**: Force start/stop games and reset game state
+- **Zone Controls**: Dynamically adjust zone radius (50-5000 meters)
+
+### Testing with Dummy Players:
+1. Click "⚙️ Admin" on homepage
+2. Enter password: `seek`
+3. Use "Add Dummy Seeker/Hider" to populate the map
+4. Test game mechanics without real players
 
 ## 🎯 Game Features
 
