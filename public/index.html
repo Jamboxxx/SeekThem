@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>SeekThem - Hide and Seek</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- PWA Meta -->
+    <meta name="theme-color" content="#2196F3">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body>
+    <div id="app">
+        <!-- Role Selection Screen -->
+        <div id="role-selection" class="screen active">
+            <div class="container">
+                <h1 class="logo">SeekThem</h1>
+                <p class="subtitle">Real-time Hide and Seek</p>
+                
+                <div class="role-cards">
+                    <div class="role-card hider" onclick="selectRole('hider')">
+                        <div class="role-icon">🫥</div>
+                        <h3>Hider</h3>
+                        <p>Stay hidden from the seekers within the shrinking zone</p>
+                        <div class="role-status" id="hider-status">Available</div>
+                    </div>
+                    
+                    <div class="role-card seeker" onclick="selectRole('seeker')">
+                        <div class="role-icon">🔍</div>
+                        <h3>Seeker</h3>
+                        <p>Find the hider before the zone collapses</p>
+                        <div class="role-status">Available</div>
+                    </div>
+                </div>
+                
+                <div class="name-input">
+                    <input type="text" id="player-name" placeholder="Enter your name" maxlength="20">
+                </div>
+                
+                <button id="join-btn" class="btn primary" disabled onclick="joinGame()">
+                    Join Game
+                </button>
+                
+                <div class="game-info">
+                    <div id="player-count">👥 0 players online</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="game-screen" class="screen">
+            <!-- Header -->
+            <div class="game-header">
+                <div class="game-status">
+                    <span id="role-badge" class="badge">Seeker</span>
+                    <span id="game-time">00:00</span>
+                </div>
+                <div class="game-controls">
+                    <button id="start-game-btn" class="btn small" onclick="startGame()" style="display: none;">
+                        Start Game
+                    </button>
+                    <button id="leave-btn" class="btn small danger" onclick="leaveGame()">
+                        Leave
+                    </button>
+                </div>
+            </div>
+
+            <!-- Map Container -->
+            <div id="map-container">
+                <div id="map"></div>
+                
+                <!-- Map Overlays -->
+                <div class="map-overlay top-left">
+                    <div class="zone-info">
+                        <div id="zone-radius">Zone: 1000m</div>
+                        <div id="zone-timer">Shrinking in: 30s</div>
+                    </div>
+                </div>
+                
+                <div class="map-overlay top-right">
+                    <div class="player-list">
+                        <div class="player-list-title">Seekers</div>
+                        <div id="seekers-list"></div>
+                    </div>
+                </div>
+                
+                <div class="map-overlay bottom-center">
+                    <div id="location-status" class="location-status">
+                        📍 Getting location...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Game Messages -->
+            <div id="game-messages" class="game-messages"></div>
+        </div>
+
+        <!-- Loading Screen -->
+        <div id="loading" class="screen">
+            <div class="container">
+                <div class="spinner"></div>
+                <p>Connecting...</p>
+            </div>
+        </div>
+
+        <!-- Game End Screen -->
+        <div id="game-end" class="screen">
+            <div class="container">
+                <div id="game-result">
+                    <h2 id="result-title">Game Over</h2>
+                    <div id="result-details"></div>
+                </div>
+                <button class="btn primary" onclick="showRoleSelection()">
+                    Play Again
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="toast"></div>
+
+    <!-- Scripts -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

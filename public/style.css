@@ -1,0 +1,583 @@
+/* Reset and base styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #333;
+    overflow: hidden;
+    height: 100vh;
+    touch-action: manipulation;
+}
+
+/* Screen management */
+.screen {
+    display: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.screen.active {
+    display: flex;
+    flex-direction: column;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    height: 100vh;
+    text-align: center;
+}
+
+/* Role Selection Screen */
+#role-selection {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.logo {
+    font-size: 3rem;
+    margin-bottom: 10px;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+
+.subtitle {
+    font-size: 1.2rem;
+    margin-bottom: 40px;
+    opacity: 0.9;
+}
+
+.role-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+    max-width: 400px;
+    margin-bottom: 30px;
+}
+
+@media (min-width: 768px) {
+    .role-cards {
+        flex-direction: row;
+        max-width: 600px;
+    }
+}
+
+.role-card {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 20px;
+    padding: 25px 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.role-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+
+.role-card.selected {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: #4CAF50;
+    transform: translateY(-5px);
+    box-shadow: 0 0 20px rgba(76, 175, 80, 0.5);
+}
+
+.role-card.hider.selected {
+    border-color: #FF9800;
+    box-shadow: 0 0 20px rgba(255, 152, 0, 0.5);
+}
+
+.role-icon {
+    font-size: 3rem;
+    margin-bottom: 15px;
+}
+
+.role-card h3 {
+    font-size: 1.5rem;
+    margin-bottom: 10px;
+}
+
+.role-card p {
+    opacity: 0.8;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.role-status {
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    font-size: 0.8rem;
+    padding: 4px 8px;
+    border-radius: 12px;
+    background: rgba(76, 175, 80, 0.8);
+    color: white;
+}
+
+.role-status.taken {
+    background: rgba(244, 67, 54, 0.8);
+}
+
+.name-input {
+    width: 100%;
+    max-width: 300px;
+    margin-bottom: 30px;
+}
+
+.name-input input {
+    width: 100%;
+    padding: 15px 20px;
+    border: none;
+    border-radius: 25px;
+    font-size: 1rem;
+    background: rgba(255, 255, 255, 0.9);
+    text-align: center;
+    outline: none;
+}
+
+.name-input input::placeholder {
+    color: #666;
+}
+
+/* Buttons */
+.btn {
+    padding: 15px 30px;
+    border: none;
+    border-radius: 25px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    outline: none;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.btn.primary {
+    background: #4CAF50;
+    color: white;
+}
+
+.btn.primary:not(:disabled):hover {
+    background: #45a049;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4);
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.btn.small {
+    padding: 8px 16px;
+    font-size: 0.8rem;
+}
+
+.btn.danger {
+    background: #f44336;
+    color: white;
+}
+
+.btn.danger:hover {
+    background: #da190b;
+}
+
+.game-info {
+    margin-top: 20px;
+    opacity: 0.8;
+}
+
+/* Game Screen */
+#game-screen {
+    background: #f5f5f5;
+}
+
+.game-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    background: white;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    z-index: 1000;
+}
+
+.game-status {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.badge.hider {
+    background: #FF9800;
+    color: white;
+}
+
+.badge.seeker {
+    background: #2196F3;
+    color: white;
+}
+
+#game-time {
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    font-size: 1.1rem;
+    color: #333;
+}
+
+.game-controls {
+    display: flex;
+    gap: 10px;
+}
+
+/* Map */
+#map-container {
+    position: relative;
+    flex: 1;
+    width: 100%;
+}
+
+#map {
+    width: 100%;
+    height: 100%;
+}
+
+.map-overlay {
+    position: absolute;
+    z-index: 1000;
+    pointer-events: none;
+}
+
+.map-overlay > * {
+    pointer-events: auto;
+}
+
+.map-overlay.top-left {
+    top: 15px;
+    left: 15px;
+}
+
+.map-overlay.top-right {
+    top: 15px;
+    right: 15px;
+}
+
+.map-overlay.bottom-center {
+    bottom: 15px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.zone-info {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    padding: 10px 15px;
+    border-radius: 15px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    font-size: 0.9rem;
+    min-width: 150px;
+}
+
+.player-list {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    padding: 10px 15px;
+    border-radius: 15px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    min-width: 160px;
+    max-width: 200px;
+}
+
+.player-list-title {
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #2196F3;
+    font-size: 0.9rem;
+}
+
+.seeker-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    font-size: 0.8rem;
+}
+
+.seeker-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.location-status {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    padding: 8px 15px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    color: #666;
+}
+
+/* Player markers */
+.player-marker {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    border: 2px solid white;
+}
+
+.own-marker {
+    background: #4CAF50;
+    animation: pulse 2s infinite;
+}
+
+.seeker-marker {
+    background: #2196F3;
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(76, 175, 80, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0); }
+}
+
+/* Loading screen */
+#loading {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    justify-content: center;
+    align-items: center;
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    border-top: 4px solid white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 20px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Game end screen */
+#game-end {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+#game-result {
+    text-align: center;
+    margin-bottom: 40px;
+}
+
+#result-title {
+    font-size: 2.5rem;
+    margin-bottom: 20px;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+
+#result-details {
+    font-size: 1.1rem;
+    opacity: 0.9;
+    line-height: 1.6;
+}
+
+/* Toast notifications */
+.toast {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-100px);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 25px;
+    font-size: 0.9rem;
+    z-index: 10000;
+    opacity: 0;
+    transition: all 0.3s ease;
+    max-width: 90%;
+    text-align: center;
+}
+
+.toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.toast.success {
+    background: rgba(76, 175, 80, 0.9);
+}
+
+.toast.error {
+    background: rgba(244, 67, 54, 0.9);
+}
+
+.toast.info {
+    background: rgba(33, 150, 243, 0.9);
+}
+
+/* Game messages */
+.game-messages {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2000;
+    pointer-events: none;
+}
+
+/* Responsive design */
+@media (max-width: 480px) {
+    .logo {
+        font-size: 2.5rem;
+    }
+    
+    .container {
+        padding: 15px;
+    }
+    
+    .role-card {
+        padding: 20px 15px;
+    }
+    
+    .game-header {
+        padding: 8px 12px;
+    }
+    
+    .map-overlay.top-left,
+    .map-overlay.top-right {
+        top: 10px;
+    }
+    
+    .map-overlay.top-left {
+        left: 10px;
+    }
+    
+    .map-overlay.top-right {
+        right: 10px;
+    }
+    
+    .zone-info,
+    .player-list {
+        padding: 8px 12px;
+        font-size: 0.8rem;
+    }
+    
+    .player-list {
+        min-width: 140px;
+        max-width: 180px;
+    }
+}
+
+/* Landscape orientation adjustments for mobile */
+@media screen and (orientation: landscape) and (max-height: 500px) {
+    .container {
+        padding: 10px;
+    }
+    
+    .logo {
+        font-size: 2rem;
+        margin-bottom: 5px;
+    }
+    
+    .subtitle {
+        font-size: 1rem;
+        margin-bottom: 20px;
+    }
+    
+    .role-cards {
+        flex-direction: row;
+        margin-bottom: 15px;
+    }
+    
+    .role-card {
+        padding: 15px 10px;
+    }
+    
+    .role-icon {
+        font-size: 2rem;
+        margin-bottom: 5px;
+    }
+    
+    .role-card h3 {
+        font-size: 1.2rem;
+        margin-bottom: 5px;
+    }
+    
+    .role-card p {
+        font-size: 0.8rem;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .game-header {
+        background: #333;
+        color: white;
+    }
+    
+    .zone-info,
+    .player-list,
+    .location-status {
+        background: rgba(51, 51, 51, 0.95);
+        color: white;
+    }
+    
+    .player-list-title {
+        color: #64B5F6;
+    }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+    .role-card {
+        border-width: 3px;
+    }
+    
+    .btn {
+        border: 2px solid;
+    }
+    
+    .player-marker {
+        border-width: 3px;
+    }
+}
