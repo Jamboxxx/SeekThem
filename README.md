@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-# 🕵️ Hiderr - Real-Time Hide and Seek
-=======
-# SeekThem - Real-Time Hide and Seek
->>>>>>> 2002b28815f979b7653612b90ee2944216f381f8
+# Hiderr - Real-Time Hide and Seek
 
 A real-time multiplayer hide and seek game with GPS location tracking and dynamic shrinking zones. Perfect for outdoor games with friends!
 
@@ -30,8 +26,8 @@ docker-compose up -d
 
 ### Option 3: Manual Docker Build
 ```bash
-docker build -t seek-them .
-docker run -p 3000:3000 seek-them
+docker build -t Hiderr
+docker run -p 3000:3000 Hiderr
 ```
 
 
@@ -67,8 +63,8 @@ Access admin tools from the homepage with password: **`seek`**
 
 ### Testing with Dummy Players:
 1. Click " Admin" on homepage
-2. Enter password: `seek`
-3. Use "Add Dummy Seeker/Hider" to populate the map
+2. Enter password: ``
+3. Use "Add Dummy seeker/Hider" to populate the map
 4. Test game mechanics without real players
 
 ### Edit Zone Settings:
