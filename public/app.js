@@ -20,9 +20,11 @@ let locationWatchId = null;
 // Connection management
 let connectionManager = {
     isConnected: false,
+    isConnecting: false,
+    isRejoining: false,
     reconnectAttempts: 0,
-    maxReconnectAttempts: 10,
-    reconnectDelay: 1000,
+    maxReconnectAttempts: 5,
+    reconnectDelay: 2000,
     heartbeatInterval: null,
     lastHeartbeat: Date.now(),
     backgroundMode: false
@@ -48,20 +50,6 @@ let playerData = {
 
 function generateSessionId() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2);
-}
-
-// localStorage functions
-function savePlayerData() {
-    try {
-        if (playerName) {
-            localStorage.setItem('seekThem_playerName', playerName);
-        }
-        if (selectedRole) {
-            localStorage.setItem('seekThem_selectedRole', selectedRole);
-        }
-    } catch (e) {
-        console.warn('Could not save to localStorage:', e);
-    }
 }
 
 // Enhanced localStorage functions with full state management
@@ -147,11 +135,64 @@ function loadPlayerData() {
     }
 }
 
+// Start connection monitoring with proper timer management
+function startConnectionMonitoring() {
+    // Clear any existing heartbeat timer
+    if (gameTimers.heartbeat) {
+        clearInterval(gameTimers.heartbeat);
+    }
+    
+    // Start heartbeat monitoring - less frequent to prevent spam
+    gameTimers.heartbeat = setInterval(() => {
+        if (socket && socket.connected) {
+            socket.emit('ping');
+            
+            // Check if we haven't received a pong in too long (be more tolerant)
+            if (Date.now() - connectionManager.lastHeartbeat > 60000) {
+                console.warn('Connection seems unstable, but avoiding forced reconnect');
+                // Don't force disconnect, let socket.io handle it naturally
+            }
+        }
+    }, 30000); // Send ping every 30 seconds instead of 10
+}
+
+// Schedule reconnection with proper cleanup
+function scheduleReconnect() {
+    if (gameTimers.reconnect) {
+        clearTimeout(gameTimers.reconnect);
+    }
+    
+    connectionManager.reconnectAttempts++;
+    
+    if (connectionManager.reconnectAttempts >= connectionManager.maxReconnectAttempts) {
+        updateConnectionStatus('Max reconnection attempts reached - Please refresh', 'error');
+        return;
+    }
+    
+    const delay = Math.min(connectionManager.reconnectDelay * Math.pow(1.5, connectionManager.reconnectAttempts), 30000);
+    
+    console.log(`Scheduling reconnect attempt ${connectionManager.reconnectAttempts} in ${delay}ms`);
+    
+    gameTimers.reconnect = setTimeout(() => {
+        if (!socket || !socket.connected) {
+            console.log('Attempting reconnection...');
+            connectionManager.isConnecting = false; // Reset flag
+            initializeConnection();
+        }
+    }, delay);
+}
+
 // Initialize enhanced connection management
 function initializeConnection() {
     if (socket && socket.connected) {
         return; // Already connected
     }
+    
+    // Prevent multiple connection attempts
+    if (connectionManager.isConnecting) {
+        return;
+    }
+    connectionManager.isConnecting = true;
     
     socket = io({
         transports: ['websocket', 'polling'],
@@ -159,11 +200,12 @@ function initializeConnection() {
         rememberUpgrade: true,
         timeout: 20000,
         reconnection: true,
-        reconnectionDelay: connectionManager.reconnectDelay,
+        reconnectionDelay: Math.max(1000, connectionManager.reconnectDelay),
         reconnectionAttempts: connectionManager.maxReconnectAttempts,
-        reconnectionDelayMax: 5000,
+        reconnectionDelayMax: 10000,
         maxReconnectionAttempts: connectionManager.maxReconnectAttempts,
-        forceNew: false
+        forceNew: false,
+        autoConnect: true
     });
     
     setupSocketEventListeners();
@@ -186,13 +228,32 @@ function setupSocketEventListeners() {
     
     // Game events
     socket.on('join-accepted', (data) => {
+        // Prevent duplicate join handling
+        if (playerId === data.playerId) {
+            return;
+        }
+        
         playerId = data.playerId;
         selectedRole = data.role;
         updateGameState(data.gameState);
         showScreen('game-screen');
         initializeMap();
+        
+        // If zone data is available (game already started), update the zone
+        if (data.zone) {
+            updateZone(data.zone);
+        }
+        
         startLocationTracking();
-        showToast(`Joined as ${selectedRole}`, 'success');
+        
+        if (data.reconnected) {
+            showToast(`Reconnected as ${selectedRole}`, 'success');
+        } else {
+            showToast(`Joined as ${selectedRole}`, 'success');
+        }
+        
+        // Reset rejoin flag
+        connectionManager.isRejoining = false;
     });
     
     socket.on('join-rejected', (data) => {
@@ -276,22 +337,24 @@ function setupSocketEventListeners() {
 function handleConnect() {
     console.log('Connected to server');
     connectionManager.isConnected = true;
+    connectionManager.isConnecting = false;
     connectionManager.reconnectAttempts = 0;
-    connectionManager.reconnectDelay = 1000;
+    connectionManager.reconnectDelay = 2000;
     
     updateConnectionStatus('Connected', 'success');
     
-    // Only show role selection if not already in game
-    if (!playerId && (!playerData.name || !playerData.role)) {
+    // Only show role selection if we're not already in a game
+    if (!playerId && !selectedRole) {
         showScreen('role-selection');
     }
     
-    // Try to restore session if we have saved data
-    if (playerData.name && playerData.role) {
+    // Only try to restore session on first connect, not every reconnect
+    if (playerData.name && playerData.role && !playerId && !connectionManager.hasTriedRestore) {
         console.log('Attempting to restore session for:', playerData.name);
+        connectionManager.hasTriedRestore = true;
         setTimeout(() => {
             attemptGameRejoin();
-        }, 500);
+        }, 1000);
     }
 }
 
@@ -313,14 +376,15 @@ function handleReconnectError(error) {
 function handleDisconnect(reason) {
     console.log('Disconnected from server:', reason);
     connectionManager.isConnected = false;
+    connectionManager.isConnecting = false;
     
     updateConnectionStatus('Disconnected', 'error');
     
     // Save current state
     savePlayerData();
     
-    // Don't auto-reconnect if server disconnected us intentionally
-    if (reason !== 'io server disconnect') {
+    // Don't auto-reconnect if server disconnected us intentionally or if we're already trying to connect
+    if (reason !== 'io server disconnect' && reason !== 'io client disconnect' && connectionManager.reconnectAttempts < connectionManager.maxReconnectAttempts) {
         scheduleReconnect();
     }
 }
@@ -352,6 +416,12 @@ function attemptGameRejoin() {
         return;
     }
     
+    // Prevent multiple simultaneous rejoin attempts
+    if (connectionManager.isRejoining) {
+        return;
+    }
+    connectionManager.isRejoining = true;
+    
     console.log('Attempting to rejoin game as:', playerData.name, playerData.role);
     
     socket.emit('join-game', {
@@ -361,16 +431,30 @@ function attemptGameRejoin() {
         sessionId: playerData.sessionId,
         lastLocation: playerData.location
     });
+    
+    // Reset rejoin flag after attempt
+    setTimeout(() => {
+        connectionManager.isRejoining = false;
+    }, 5000);
 }
 
 // Missing connection status function
 function updateConnectionStatus(message, type) {
     console.log(`Connection status: ${message} (${type})`);
-    // Show toast for important connection events
-    if (type === 'error') {
+    
+    // Only show toast for important connection events, not spam
+    if (type === 'error' && message.includes('Max reconnection')) {
         showToast(message, 'error');
     } else if (type === 'success' && message.includes('Reconnected')) {
-        showToast(message, 'success');
+        // Only show reconnection toast once
+        if (!connectionManager.hasShownReconnectToast) {
+            showToast('Reconnected to server', 'success');
+            connectionManager.hasShownReconnectToast = true;
+            // Reset flag after some time
+            setTimeout(() => {
+                connectionManager.hasShownReconnectToast = false;
+            }, 10000);
+        }
     }
 }
 
@@ -510,6 +594,12 @@ function initializeMap() {
         position: 'bottomright'
     }).addTo(map);
     
+    // Apply any pending zone data
+    if (window.pendingZoneData) {
+        updateZone(window.pendingZoneData);
+        window.pendingZoneData = null;
+    }
+    
     // Center on user location when available
     if (currentLocation) {
         map.setView([currentLocation.lat, currentLocation.lng], 16);
@@ -552,9 +642,9 @@ function updatePlayerMarker(playerData) {
     }
     
     // Show seeker locations to everyone
-    // Show hider location only to the hider themselves
+    // Show hider location only to the hider themselves (when it's their own marker)
     const shouldShowMarker = role === 'seeker' || 
-                           (role === 'hider' && playerId === playerId);
+                           (role === 'hider' && playerId === socket.id);
     
     if (shouldShowMarker) {
         const markerIcon = role === 'hider' ? '🫥' : '🔍';
@@ -582,7 +672,13 @@ function removePlayerMarker(playerId) {
 }
 
 function updateZone(zoneData) {
-    if (!map || !zoneData) return;
+    if (!zoneData) return;
+    
+    // If map isn't ready yet, store zone data and apply when map is initialized
+    if (!map) {
+        window.pendingZoneData = zoneData;
+        return;
+    }
     
     console.log('Updating zone:', zoneData);
     
@@ -702,10 +798,13 @@ function leaveGame() {
 }
 
 function resetGame() {
+    // Comprehensive timer cleanup
     stopTimers();
+    
+    // Clear all player data
     clearAllPlayerData();
     
-    // Clear map and markers
+    // Clear map and all markers
     if (map) {
         if (playerMarker) {
             map.removeLayer(playerMarker);
@@ -725,11 +824,9 @@ function resetGame() {
         map = null;
     }
     
-    // Stop location tracking
-    if (locationWatchId) {
-        navigator.geolocation.clearWatch(locationWatchId);
-        locationWatchId = null;
-    }
+    // Reset game state variables
+    gameStartTime = null;
+    currentLocation = null;
     
     // Reset UI completely
     resetRoleSelection();
@@ -780,9 +877,12 @@ function clearAllPlayerData() {
         sessionId: generateSessionId()
     };
     
-    // Reset connection manager
+    // Reset connection manager flags
     connectionManager.reconnectAttempts = 0;
     connectionManager.backgroundMode = false;
+    connectionManager.hasTriedRestore = false;
+    connectionManager.hasShownReconnectToast = false;
+    connectionManager.isRejoining = false;
 }
 
 function resetRoleSelection() {
@@ -895,6 +995,7 @@ function startGameTimer() {
 }
 
 function stopTimers() {
+    // Clear all game timers
     if (gameTimer) {
         clearInterval(gameTimer);
         gameTimer = null;
@@ -902,6 +1003,30 @@ function stopTimers() {
     if (zoneTimer) {
         clearInterval(zoneTimer);
         zoneTimer = null;
+    }
+    
+    // Clear all gameTimers object timers
+    if (gameTimers.locationUpdate) {
+        clearInterval(gameTimers.locationUpdate);
+        gameTimers.locationUpdate = null;
+    }
+    if (gameTimers.heartbeat) {
+        clearInterval(gameTimers.heartbeat);
+        gameTimers.heartbeat = null;
+    }
+    if (gameTimers.reconnect) {
+        clearTimeout(gameTimers.reconnect);
+        gameTimers.reconnect = null;
+    }
+    if (gameTimers.gameTimer) {
+        clearInterval(gameTimers.gameTimer);
+        gameTimers.gameTimer = null;
+    }
+    
+    // Stop location watching
+    if (locationWatchId) {
+        navigator.geolocation.clearWatch(locationWatchId);
+        locationWatchId = null;
     }
 }
 
@@ -1128,11 +1253,11 @@ function adminResetGame() {
 
 function updateZoneRadius() {
     const newRadius = parseInt(document.getElementById('zone-radius-input').value);
-    if (newRadius >= 50 && newRadius <= 5000) {
+    if (newRadius >= 50) {
         socket.emit('admin-update-zone', { radius: newRadius });
         showToast(`Zone radius updated to ${newRadius}m`, 'success');
     } else {
-        showToast('Radius must be between 50-5000m', 'error');
+        showToast('Radius must be at least 50m', 'error');
     }
 }
 
@@ -1187,6 +1312,42 @@ document.addEventListener('keydown', (e) => {
         checkAdminPassword();
     }
 });
+
+// Setup background handling for the app
+function setupBackgroundHandling() {
+    // Handle page visibility changes
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            connectionManager.backgroundMode = true;
+            // Reduce update frequency when in background
+            if (gameTimers.locationUpdate) {
+                clearInterval(gameTimers.locationUpdate);
+                gameTimers.locationUpdate = setInterval(() => {
+                    if (currentLocation && socket && socket.connected) {
+                        socket.emit('location-update', currentLocation);
+                    }
+                }, 10000); // 10 seconds instead of 5
+            }
+        } else {
+            connectionManager.backgroundMode = false;
+            // Restore normal update frequency
+            if (gameTimers.locationUpdate) {
+                clearInterval(gameTimers.locationUpdate);
+                gameTimers.locationUpdate = setInterval(() => {
+                    if (currentLocation && socket && socket.connected) {
+                        socket.emit('location-update', currentLocation);
+                    }
+                }, 5000); // Back to 5 seconds
+            }
+        }
+    });
+    
+    // Handle before page unload
+    window.addEventListener('beforeunload', () => {
+        savePlayerData();
+        stopTimers();
+    });
+}
 
 // Enhanced initialization with background support
 function init() {

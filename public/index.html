@@ -180,7 +180,7 @@
                     </div>
                     
                     <label>Zone Radius (m):</label>
-                    <input type="number" id="zone-radius-input" value="1000" min="50" max="5000">
+                    <input type="number" id="zone-radius-input" value="5000" min="50">
                     <button class="btn primary" onclick="updateZoneRadius()">Update Radius</button>
                     
                     <label>Shrink Rate (%):</label>
@@ -188,7 +188,7 @@
                     <span id="shrink-rate-display">50%</span>
                     
                     <label>Shrink Interval (minutes):</label>
-                    <input type="number" id="shrink-interval-input" value="15" min="1" max="60">
+                    <input type="number" id="shrink-interval-input" value="15">
                     
                     <button class="btn success" onclick="updateZoneSettings()">Update Zone Settings</button>
                     <button class="btn warning" onclick="triggerZoneShrink()">Trigger Shrink Now</button>

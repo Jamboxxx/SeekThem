@@ -47,18 +47,23 @@ app.get('/', (req, res) => {
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
-  console.log(`Player connected: ${socket.id}`);
+  // Only log connections if debug mode is enabled
+  if (process.env.DEBUG) {
+    console.log(`Player connected: ${socket.id}`);
+  }
 
   // Player joins the game
   socket.on('join-game', (data) => {
     const { role, name } = data;
     
-    console.log(`=== JOIN REQUEST DEBUG ===`);
-    console.log(`Join request: ${name} wants to be ${role}`);
-    console.log(`Current hider: ${gameState.hider}`);
-    console.log(`Players in game: ${gameState.players.size}`);
-    console.log(`Disconnected players: ${gameState.disconnectedPlayers.size}`);
-    console.log(`Game started: ${gameState.gameStarted}`);
+    if (process.env.DEBUG) {
+      console.log(`=== JOIN REQUEST DEBUG ===`);
+      console.log(`Join request: ${name} wants to be ${role}`);
+      console.log(`Current hider: ${gameState.hider}`);
+      console.log(`Players in game: ${gameState.players.size}`);
+      console.log(`Disconnected players: ${gameState.disconnectedPlayers.size}`);
+      console.log(`Game started: ${gameState.gameStarted}`);
+    }
     
     // Check if this username is already connected
     const existingPlayer = Array.from(gameState.players.values()).find(p => p.name === name);
@@ -73,7 +78,9 @@ io.on('connection', (socket) => {
     let player;
 
     if (disconnectedPlayer) {
-      console.log(`Found disconnected player data for ${name}: role ${disconnectedPlayer.role}`);
+      if (process.env.DEBUG) {
+        console.log(`Found disconnected player data for ${name}: role ${disconnectedPlayer.role}`);
+      }
       // Reconnecting player
       player = {
         id: socket.id,
@@ -91,14 +98,22 @@ io.on('connection', (socket) => {
       
       gameState.players.set(socket.id, player);
       
-      console.log(`${player.name} reconnected as ${player.role}. Hider is now: ${gameState.hider}`);
+      if (process.env.DEBUG) {
+        console.log(`${player.name} reconnected as ${player.role}. Hider is now: ${gameState.hider}`);
+      }
       
       socket.emit('join-accepted', { 
         playerId: socket.id, 
         role: player.role,
         gameState: getPublicGameState(),
-        reconnected: true
+        reconnected: true,
+        zone: gameState.gameStarted ? getZoneInfo() : null
       });
+      
+      // If game is active, send zone update immediately
+      if (gameState.gameStarted && gameState.zoneCenter) {
+        socket.emit('zone-update', getZoneInfo());
+      }
       
       // Broadcast reconnection
       socket.broadcast.emit('player-joined', {
@@ -107,7 +122,9 @@ io.on('connection', (socket) => {
         reconnected: true
       });
     } else {
-      console.log(`New player joining as ${role}`);
+      if (process.env.DEBUG) {
+        console.log(`New player joining as ${role}`);
+      }
       // New player
       if (role === 'hider') {
         if (gameState.hider) {
@@ -140,14 +157,22 @@ io.on('connection', (socket) => {
 
       gameState.players.set(socket.id, player);
 
-      console.log(`${player.name} joined as ${role}. Hider is now: ${gameState.hider}`);
-      console.log(`=== JOIN SUCCESSFUL ===`);
+      if (process.env.DEBUG) {
+        console.log(`${player.name} joined as ${role}. Hider is now: ${gameState.hider}`);
+        console.log(`=== JOIN SUCCESSFUL ===`);
+      }
 
       socket.emit('join-accepted', { 
         playerId: socket.id, 
         role: role,
-        gameState: getPublicGameState() 
+        gameState: getPublicGameState(),
+        zone: gameState.gameStarted ? getZoneInfo() : null
       });
+      
+      // If game is active, send zone update immediately
+      if (gameState.gameStarted && gameState.zoneCenter) {
+        socket.emit('zone-update', getZoneInfo());
+      }
 
       // Broadcast to all players
       socket.broadcast.emit('player-joined', {
@@ -184,7 +209,9 @@ io.on('connection', (socket) => {
         disconnected: true
       });
       
-      console.log(`Player ${player.name} disconnected`);
+      if (process.env.DEBUG) {
+        console.log(`Player ${player.name} disconnected`);
+      }
     }
   });
 
@@ -468,26 +495,6 @@ io.on('connection', (socket) => {
       console.log('Admin triggered zone shrink');
     }
   });
-
-  // Player disconnection
-  socket.on('disconnect', () => {
-    const player = gameState.players.get(socket.id);
-    if (player) {
-      console.log(`${player.name} disconnected`);
-      
-      if (player.role === 'hider') {
-        gameState.hider = null;
-        stopGame();
-      }
-
-      gameState.players.delete(socket.id);
-      
-      socket.broadcast.emit('player-left', {
-        playerId: socket.id,
-        gameState: getPublicGameState()
-      });
-    }
-  });
 });
 
 // Game logic functions
@@ -539,19 +546,25 @@ function stopGame() {
   gameState.zoneRadius = gameState.initialRadius;
   gameState.targetZoneRadius = gameState.initialRadius * 0.5;
   gameState.zonePhase = 1;
+  gameState.zoneShrinkStartTime = null;
   
   // Clear all players and disconnected players cache when game stops
   gameState.players.clear();
   gameState.disconnectedPlayers.clear();
   gameState.hider = null;
   
+  // Comprehensive timer cleanup
   if (shrinkTimer) {
     clearInterval(shrinkTimer);
     shrinkTimer = null;
   }
+  if (gameState.zoneTimer) {
+    clearInterval(gameState.zoneTimer);
+    gameState.zoneTimer = null;
+  }
 
   io.emit('game-stopped');
-  console.log('Game stopped - all players cleared');
+  console.log('Game stopped - all players and timers cleared');
 }
 
 // Fortnite-style zone functions
@@ -610,7 +623,15 @@ function moveZoneToTarget() {
 }
 
 function startZoneShrinking() {
-  if (shrinkTimer) clearInterval(shrinkTimer);
+  // Clear any existing timers
+  if (shrinkTimer) {
+    clearInterval(shrinkTimer);
+    shrinkTimer = null;
+  }
+  if (gameState.zoneTimer) {
+    clearInterval(gameState.zoneTimer);
+    gameState.zoneTimer = null;
+  }
   
   // Generate first target zone
   generateNextTargetZone();
@@ -638,6 +659,9 @@ function startZoneShrinking() {
       clearInterval(countdownTimer);
     }
   }, 1000);
+  
+  // Store countdown timer reference for cleanup
+  gameState.zoneTimer = countdownTimer;
   
   gameState.zoneShrinkStartTime = Date.now();
   
