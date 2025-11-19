@@ -1,8 +1,6 @@
-<<<<<<< HEAD
-# 🕵️ Hiderr - Real-Time Hide and Seek
+# Hiderr - Real-Time Hide and Seek
 =======
 # SeekThem - Real-Time Hide and Seek
->>>>>>> 2002b28815f979b7653612b90ee2944216f381f8
 
 A real-time multiplayer hide and seek game with GPS location tracking and dynamic shrinking zones. Perfect for outdoor games with friends!
 
