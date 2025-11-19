@@ -20,7 +20,8 @@ let gameState = {
   gameStarted: false,
   gameEndTime: null,
   zoneCenter: null,
-  zoneRadius: 1000,
+  zoneRadius: 5000,
+  initialRadius: 5000, // Add initial radius for reset purposes
   targetZoneCenter: null,
   targetZoneRadius: null,
   zonePhase: 'waiting', // 'waiting', 'showing-target', 'shrinking'
@@ -52,9 +53,17 @@ io.on('connection', (socket) => {
   socket.on('join-game', (data) => {
     const { role, name } = data;
     
+    console.log(`=== JOIN REQUEST DEBUG ===`);
+    console.log(`Join request: ${name} wants to be ${role}`);
+    console.log(`Current hider: ${gameState.hider}`);
+    console.log(`Players in game: ${gameState.players.size}`);
+    console.log(`Disconnected players: ${gameState.disconnectedPlayers.size}`);
+    console.log(`Game started: ${gameState.gameStarted}`);
+    
     // Check if this username is already connected
     const existingPlayer = Array.from(gameState.players.values()).find(p => p.name === name);
     if (existingPlayer && existingPlayer.id !== socket.id) {
+      console.log(`Rejecting ${name}: username already in use by ${existingPlayer.id}`);
       socket.emit('join-rejected', { reason: 'Username already in use' });
       return;
     }
@@ -64,6 +73,7 @@ io.on('connection', (socket) => {
     let player;
 
     if (disconnectedPlayer) {
+      console.log(`Found disconnected player data for ${name}: role ${disconnectedPlayer.role}`);
       // Reconnecting player
       player = {
         id: socket.id,
@@ -76,9 +86,12 @@ io.on('connection', (socket) => {
       
       if (disconnectedPlayer.role === 'hider') {
         gameState.hider = socket.id;
+        console.log(`Restored hider: ${socket.id}`);
       }
       
       gameState.players.set(socket.id, player);
+      
+      console.log(`${player.name} reconnected as ${player.role}. Hider is now: ${gameState.hider}`);
       
       socket.emit('join-accepted', { 
         playerId: socket.id, 
@@ -93,10 +106,30 @@ io.on('connection', (socket) => {
         gameState: getPublicGameState(),
         reconnected: true
       });
-      
-      console.log(`${player.name} reconnected as ${player.role}`);
     } else {
+      console.log(`New player joining as ${role}`);
       // New player
+      if (role === 'hider') {
+        if (gameState.hider) {
+          // Check if this is the same player trying to rejoin as hider
+          const existingHider = gameState.players.get(gameState.hider);
+          if (existingHider && existingHider.name === name) {
+            console.log(`Same player (${name}) rejoining as hider, updating their socket ID`);
+            // Remove old hider entry and update to new socket ID
+            gameState.players.delete(gameState.hider);
+            gameState.hider = socket.id;
+          } else {
+            // Different player trying to be hider
+            console.log(`REJECTING ${name} as hider because ${gameState.hider} is already hider`);
+            socket.emit('join-rejected', { reason: 'Hider slot already taken' });
+            return;
+          }
+        } else {
+          gameState.hider = socket.id;
+          console.log(`Set new hider: ${socket.id}`);
+        }
+      }
+
       const player = {
         id: socket.id,
         name: name || `Player ${socket.id.substr(0, 6)}`,
@@ -105,16 +138,10 @@ io.on('connection', (socket) => {
         lastUpdate: Date.now()
       };
 
-      if (role === 'hider') {
-        if (gameState.hider) {
-          // Already have a hider, reject
-          socket.emit('join-rejected', { reason: 'Hider slot already taken' });
-          return;
-        }
-        gameState.hider = socket.id;
-      }
-
       gameState.players.set(socket.id, player);
+
+      console.log(`${player.name} joined as ${role}. Hider is now: ${gameState.hider}`);
+      console.log(`=== JOIN SUCCESSFUL ===`);
 
       socket.emit('join-accepted', { 
         playerId: socket.id, 
@@ -127,8 +154,6 @@ io.on('connection', (socket) => {
         player: getPublicPlayerInfo(player),
         gameState: getPublicGameState()
       });
-
-      console.log(`${player.name} joined as ${role}`);
     }
   });
 
@@ -174,10 +199,7 @@ io.on('connection', (socket) => {
     };
     player.lastUpdate = Date.now();
 
-    // If this is the hider and we don't have a zone center yet, set it
-    if (player.role === 'hider' && !gameState.zoneCenter) {
-      gameState.zoneCenter = { lat: data.lat, lng: data.lng };
-    }
+    // Don't auto-set zone center here - let startGame() handle proper randomization
 
     // Broadcast seeker locations to everyone
     // Broadcast hider location only to the hider themselves
@@ -357,11 +379,35 @@ io.on('connection', (socket) => {
   });
 
   socket.on('admin-reset-game', () => {
+    console.log('Admin reset triggered - performing complete game reset');
+    
+    // Stop the game and clear all timers
     stopGame();
+    
+    // Comprehensive state reset
     gameState.players.clear();
+    gameState.disconnectedPlayers.clear();
     gameState.hider = null;
     gameState.zoneCenter = null;
+    gameState.targetZoneCenter = null;
     gameState.zoneRadius = gameState.initialRadius;
+    gameState.targetZoneRadius = null;
+    gameState.zonePhase = 'waiting';
+    gameState.gameStartTime = null;
+    gameState.gameEndTime = null;
+    gameState.zoneShrinkStartTime = null;
+    
+    // Clear any remaining timers
+    if (gameState.zoneTimer) {
+      clearTimeout(gameState.zoneTimer);
+      gameState.zoneTimer = null;
+    }
+    if (shrinkTimer) {
+      clearInterval(shrinkTimer);
+      shrinkTimer = null;
+    }
+    
+    console.log('Game reset complete - all state cleared');
     io.emit('game-stopped');
   });
 
@@ -451,18 +497,31 @@ function startGame() {
   gameState.gameStarted = true;
   gameState.gameStartTime = Date.now();
   
-  // Initialize zone around all players if not set
+
   if (!gameState.zoneCenter) {
-    const allLocations = Array.from(gameState.players.values())
-      .filter(p => p.location)
-      .map(p => p.location);
+    // Get hider location to base initial zone on
+    const hiderPlayer = gameState.hider ? gameState.players.get(gameState.hider) : null;
+    const hiderLocation = hiderPlayer?.location;
     
-    if (allLocations.length > 0) {
-      gameState.zoneCenter = calculateCenterPoint(allLocations);
+    if (hiderLocation) {
+      // Generate random zone center that puts hider randomly within the zone (not at center)
+      // Place hider at random position within the circle
+      const hiderDistanceFromCenter = Math.random() * gameState.zoneRadius * 0.8; // Hider up to 80% from center
+      const hiderAngleFromCenter = Math.random() * 2 * Math.PI;
+      
+      // Calculate where the zone center should be to put hider at this random position
+      const centerOffsetLat = -(hiderDistanceFromCenter * Math.cos(hiderAngleFromCenter)) / 111320;
+      const centerOffsetLng = -(hiderDistanceFromCenter * Math.sin(hiderAngleFromCenter)) / (111320 * Math.cos(hiderLocation.lat * Math.PI / 180));
+      
+      gameState.zoneCenter = {
+        lat: hiderLocation.lat + centerOffsetLat,
+        lng: hiderLocation.lng + centerOffsetLng
+      };
+      
+      console.log(`Initial zone: hider positioned ${hiderDistanceFromCenter.toFixed(0)}m from center (${(hiderDistanceFromCenter/gameState.zoneRadius*100).toFixed(1)}% of radius)`);
     }
   }
-
-  console.log('Game started!');
+  console.log('Game started! Zone center:', gameState.zoneCenter);
   io.emit('game-started', {
     gameState: getPublicGameState(),
     zone: getZoneInfo()
@@ -481,13 +540,18 @@ function stopGame() {
   gameState.targetZoneRadius = gameState.initialRadius * 0.5;
   gameState.zonePhase = 1;
   
+  // Clear all players and disconnected players cache when game stops
+  gameState.players.clear();
+  gameState.disconnectedPlayers.clear();
+  gameState.hider = null;
+  
   if (shrinkTimer) {
     clearInterval(shrinkTimer);
     shrinkTimer = null;
   }
 
   io.emit('game-stopped');
-  console.log('Game stopped');
+  console.log('Game stopped - all players cleared');
 }
 
 // Fortnite-style zone functions
@@ -498,60 +562,39 @@ function generateNextTargetZone() {
   
   // Calculate next zone size
   const nextRadius = gameState.zoneRadius * gameState.shrinkRate;
-  
-  // Generate random target center within current zone that includes the hider
-  const currentCenter = gameState.zoneCenter;
   const hiderLoc = hiderPlayer.location;
   
-  // Maximum distance the target center can be from current center
-  const maxOffset = gameState.zoneRadius - nextRadius;
+  // Use same approach as initial zone: place hider randomly within the new zone
+  const hiderDistanceFromNewCenter = Math.random() * nextRadius * 0.8; // Hider up to 80% from new center
+  const hiderAngleFromNewCenter = Math.random() * 2 * Math.PI;
   
-  // Generate multiple candidate positions and pick the best one
-  let bestTarget = null;
-  let bestScore = -1;
+  // Calculate where the new zone center should be to put hider at this random position
+  const centerOffsetLat = -(hiderDistanceFromNewCenter * Math.cos(hiderAngleFromNewCenter)) / 111320;
+  const centerOffsetLng = -(hiderDistanceFromNewCenter * Math.sin(hiderAngleFromNewCenter)) / (111320 * Math.cos(hiderLoc.lat * Math.PI / 180));
   
-  for (let attempt = 0; attempt < 20; attempt++) {
-    // Random angle and distance
-    const angle = Math.random() * 2 * Math.PI;
-    const distance = Math.random() * maxOffset;
+  const newCenter = {
+    lat: hiderLoc.lat + centerOffsetLat,
+    lng: hiderLoc.lng + centerOffsetLng
+  };
+  
+  // Make sure the new zone center is within reasonable bounds of the current zone
+  const distanceFromCurrentCenter = calculateDistance(newCenter, gameState.zoneCenter);
+  const maxAllowedDistance = gameState.zoneRadius - nextRadius;
+  
+  if (distanceFromCurrentCenter > maxAllowedDistance) {
+    // If the random position would put the zone too far, constrain it
+    const constrainAngle = Math.atan2(newCenter.lng - gameState.zoneCenter.lng, newCenter.lat - gameState.zoneCenter.lat);
+    const constrainedLat = gameState.zoneCenter.lat + (maxAllowedDistance / 111320) * Math.cos(constrainAngle);
+    const constrainedLng = gameState.zoneCenter.lng + (maxAllowedDistance / (111320 * Math.cos(gameState.zoneCenter.lat * Math.PI / 180))) * Math.sin(constrainAngle);
     
-    // Calculate candidate target center
-    const targetLat = currentCenter.lat + (distance / 111320) * Math.cos(angle); // ~111320m per degree lat
-    const targetLng = currentCenter.lng + (distance / (111320 * Math.cos(currentCenter.lat * Math.PI / 180))) * Math.sin(angle);
-    
-    const candidateTarget = { lat: targetLat, lng: targetLng };
-    
-    // Check if hider would be within this target zone
-    const hiderDistance = calculateDistance(candidateTarget, hiderLoc);
-    
-    if (hiderDistance <= nextRadius) {
-      // Score based on how much of the map it covers while including hider
-      // Prefer positions that are not too centered on hider but still include them
-      const centerDistance = hiderDistance / nextRadius; // 0 = on hider, 1 = edge of zone
-      const score = centerDistance; // Higher score for hider closer to edge
-      
-      if (score > bestScore) {
-        bestScore = score;
-        bestTarget = candidateTarget;
-      }
-    }
+    gameState.targetZoneCenter = { lat: constrainedLat, lng: constrainedLng };
+  } else {
+    gameState.targetZoneCenter = newCenter;
   }
   
-  // Fallback: if no good position found, center on hider with some offset
-  if (!bestTarget) {
-    const offsetDistance = nextRadius * 0.3; // 30% of radius
-    const randomAngle = Math.random() * 2 * Math.PI;
-    
-    bestTarget = {
-      lat: hiderLoc.lat + (offsetDistance / 111320) * Math.cos(randomAngle),
-      lng: hiderLoc.lng + (offsetDistance / (111320 * Math.cos(hiderLoc.lat * Math.PI / 180))) * Math.sin(randomAngle)
-    };
-  }
-  
-  gameState.targetZoneCenter = bestTarget;
   gameState.targetZoneRadius = nextRadius;
   
-  console.log(`Generated target zone ${gameState.zonePhase + 1}: center ${bestTarget.lat.toFixed(6)}, ${bestTarget.lng.toFixed(6)}, radius ${Math.round(nextRadius)}m`);
+  console.log(`Next zone: hider will be ${hiderDistanceFromNewCenter.toFixed(0)}m from center (${(hiderDistanceFromNewCenter/nextRadius*100).toFixed(1)}% of radius)`);
 }
 
 function moveZoneToTarget() {

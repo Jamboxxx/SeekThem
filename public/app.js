@@ -251,7 +251,7 @@ function setupSocketEventListeners() {
     });
     
     socket.on('game-stopped', () => {
-        showToast('Game stopped', 'info');
+        showToast('Game reset - all player data cleared!', 'info');
         resetGame();
     });
 
@@ -432,7 +432,7 @@ function startLocationTracking() {
     const options = {
         enableHighAccuracy: true,
         timeout: 10000,
-        maximumAge: 5000
+        maximumAge: 3000 // Reduced from 5000 to 3000ms for fresher data
     };
     
     navigator.geolocation.watchPosition(
@@ -459,6 +459,13 @@ function startLocationTracking() {
         },
         options
     );
+    
+    // Also send location updates on a regular interval to ensure server always has fresh data
+    gameTimers.locationUpdate = setInterval(() => {
+        if (currentLocation && socket && socket.connected) {
+            socket.emit('location-update', currentLocation);
+        }
+    }, 5000); // Send location every 5 seconds regardless of movement
 }
 
 function handleLocationError(error) {
@@ -587,25 +594,25 @@ function updateZone(zoneData) {
         map.removeLayer(targetZoneCircle);
     }
     
-    // Add main zone circle (current playable area) - visible to all players
+    // This is the white circle
     zoneCircle = L.circle([zoneData.center.lat, zoneData.center.lng], {
         radius: zoneData.radius,
-        fillColor: '#ff6b6b',
-        fillOpacity: 0.1,
-        color: '#ff6b6b',
-        weight: 3,
-        dashArray: '10, 5'
+        fillColor: '#8b8b8b8b',
+        fillOpacity: 0.15,
+        color: '#8b8b8b8b',
+        weight: 2,
+        dashArray: '15, 10'
     }).addTo(map);
     
-    // Add target zone circle (next safe zone) - visible to all players
+    // Add target zone circle (next safe zone)
     if (zoneData.targetCenter && zoneData.targetRadius) {
         targetZoneCircle = L.circle([zoneData.targetCenter.lat, zoneData.targetCenter.lng], {
             radius: zoneData.targetRadius,
-            fillColor: '#ffffff',
-            fillOpacity: 0.15,
-            color: '#ffffff',
-            weight: 2,
-            dashArray: '15, 10'
+            fillColor: '#ff6b6b',
+            fillOpacity: 0.1,
+            color: '#ff6b6b',
+            weight: 3,
+            dashArray: '10, 5'
         }).addTo(map);
     }
     
@@ -696,11 +703,7 @@ function leaveGame() {
 
 function resetGame() {
     stopTimers();
-    selectedRole = null;
-    playerName = '';
-    playerId = null;
-    currentLocation = null;
-    gameStartTime = null;
+    clearAllPlayerData();
     
     // Clear map and markers
     if (map) {
@@ -722,18 +725,80 @@ function resetGame() {
         map = null;
     }
     
-    // Reset UI
+    // Stop location tracking
+    if (locationWatchId) {
+        navigator.geolocation.clearWatch(locationWatchId);
+        locationWatchId = null;
+    }
+    
+    // Reset UI completely
     resetRoleSelection();
+    clearNameInput();
     showScreen('role-selection');
+}
+
+function clearAllPlayerData() {
+    // Emit leave-game to server to free up roles (only if socket is initialized and connected)
+    try {
+        if (socket && socket.connected && (selectedRole || playerData.role)) {
+            socket.emit('leave-game');
+        }
+    } catch (e) {
+        // Socket might not be initialized yet, ignore this error
+        console.log('Socket not ready for leave-game event:', e.message);
+    }
+    
+    // Clear all game variables
+    selectedRole = null;
+    playerName = '';
+    playerId = null;
+    currentLocation = null;
+    gameStartTime = null;
+    
+    // Clear localStorage completely - including individual items
+    localStorage.removeItem('seekThem_playerData');
+    localStorage.removeItem('seekThem_sessionData');
+    localStorage.removeItem('seekThem_gameState');
+    localStorage.removeItem('seekThem_playerName');
+    localStorage.removeItem('seekThem_selectedRole');
+    localStorage.removeItem('seekThem_lastActive');
+    localStorage.removeItem('playerData');
+    
+    // Clear name input field
+    const nameInput = document.getElementById('player-name');
+    if (nameInput) {
+        nameInput.value = '';
+    }
+    
+    // Reset playerData object
+    playerData = {
+        name: '',
+        role: null,
+        id: null,
+        location: null,
+        lastUpdate: Date.now(),
+        sessionId: generateSessionId()
+    };
+    
+    // Reset connection manager
+    connectionManager.reconnectAttempts = 0;
+    connectionManager.backgroundMode = false;
 }
 
 function resetRoleSelection() {
     document.querySelectorAll('.role-card').forEach(card => {
         card.classList.remove('selected');
     });
-    document.getElementById('player-name').value = '';
-    playerName = '';
     selectedRole = null;
+    updateJoinButton();
+}
+
+function clearNameInput() {
+    const nameInput = document.getElementById('player-name');
+    if (nameInput) {
+        nameInput.value = '';
+        playerName = '';
+    }
     updateJoinButton();
 }
 
@@ -754,13 +819,6 @@ function updateGameState(gameState) {
     // Update player count
     document.getElementById('player-count').textContent = 
         `👥 ${gameState.playerCount} players online`;
-    
-    // Update hider status
-    const hiderStatus = document.getElementById('hider-status');
-    if (hiderStatus) {
-        hiderStatus.textContent = gameState.hasHider ? 'Taken' : 'Available';
-        hiderStatus.className = 'role-status ' + (gameState.hasHider ? 'taken' : '');
-    }
     
     // Update seekers list
     updateSeekersList(gameState.seekers);
@@ -854,20 +912,14 @@ function showGameEnd(result) {
     
     if (result.winner === 'seekers') {
         title.textContent = 'Seekers Win!';
-        if (result.finder) {
-            details.innerHTML = `
-                <p>🎉 ${result.finder} found the hider!</p>
-                <p>Distance: ${result.distance}m</p>
-            `;
-        } else {
-            details.innerHTML = `<p>${result.reason}</p>`;
-        }
     } else if (result.winner === 'hider') {
         title.textContent = 'Hider Wins!';
-        details.innerHTML = `<p>🎯 ${result.reason}</p>`;
     }
     
     showScreen('game-end');
+    
+    // Show message for admin reset
+    showToast('Contact your admin to reset for next round.', 'info');
 }
 
 function showRoleSelection() {
@@ -1138,7 +1190,10 @@ document.addEventListener('keydown', (e) => {
 
 // Enhanced initialization with background support
 function init() {
-    console.log('Initializing SeekThem with enhanced features...');
+    console.log('Initializing SeekThem...');
+    
+    // Clear all data on startup
+    clearAllPlayerData();
     
     // Load any saved player data
     const hasRestorableSession = loadPlayerData();
